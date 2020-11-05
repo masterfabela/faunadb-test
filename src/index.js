@@ -1,4 +1,5 @@
 const app = require('express')();
+const { response, request } = require('express');
 const faunaDB = require('faunadb');
 const { FAUNADB_KEY } = require('../secrets');
 const {
@@ -9,6 +10,9 @@ const {
 	Match,
 	Index,
 	Create,
+	Paginate,
+	Function: Fn,
+	Call,
 } = faunaDB.query;
 
 const client = new faunaDB.Client({ secret: FAUNADB_KEY });
@@ -24,16 +28,37 @@ app.get('/tweet/:id', async (request, response) => {
 	response.send(item);
 });
 
+app.get('/tweet', async (request, response) => {
+	const items = await client
+		.query(
+			Paginate(
+				Match(
+					Index('tweets_by_user'),
+					Call(Fn('getUser'), 'Alice')
+				)
+			)
+		)
+		.catch((error) => console.log(error));
+	response.send(items);
+});
+
 app.post('/tweet', async (request, response) => {
 	const data = {
-		user: Select(
-			'ref',
-			Get(Match(Index('users_by_name'), 'Alice'))
-		),
+		user: Call(Fn('getUser'), 'Alice'),
 		text: 'Hola Mundo!',
 	};
 	const item = await client
 		.query(Create(Collection('tweets'), { data }))
 		.catch((error) => console.log(error));
 	response.send(item);
+});
+
+app.post('/relationship', async (request, response) => {
+	const data = {
+		follower: Call(Fn('getUser'), 'Bob'),
+		followee: Call(Fn('getUser'), 'Alice'),
+	};
+	const items = await client.query(
+		Create(Collection('relationships'), { data })
+	);
 });
